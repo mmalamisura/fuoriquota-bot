@@ -1,49 +1,92 @@
 import requests, os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHANNEL = os.getenv("CHANNEL_ID")
 API_KEY = os.getenv("ODDS_API_KEY")
 
-ANALISI = {
-    "Como": "VALORE: GOL a 1.80",
-    "Lecce": "VALORE: X2 a 1.55",
-    "Pisa": "VALORE: Lazio -0.5 a 1.95",
-    "Inter": "VALORE: GOL a 1.70",
-    "Napoli": "FUORI QUOTA: Napoli -1.5 a 2.10",
-    "Cagliari": "VALORE: Under 2.5",
-    "Genoa": "VALORE: 1X a 1.35",
-    "Juventus": "BIG MATCH: Under 2.5"
-}
+def get_next_update_text():
+    # Calcola prossimo orario italiano
+    now_italy = datetime.utcnow() + timedelta(hours=2)
+    h = now_italy.hour
+    if h < 9:
+        return "Oggi alle 09:00"
+    elif h < 14:
+        return "Oggi alle 14:00"
+    elif h < 20:
+        return "Oggi alle 20:45"
+    else:
+        return "Domani alle 09:00"
 
-def main():
+def get_matches():
     url = "https://api.the-odds-api.com/v4/sports/soccer_italy_serie_a/odds"
     params = {"apiKey": API_KEY, "regions": "eu", "markets": "h2h", "oddsFormat": "decimal"}
     try:
         r = requests.get(url, params=params, timeout=20)
+        if r.status_code!= 200:
+            return None
+
         games = r.json()
-        msg = "🔥 FUORI QUOTA - QUOTE LIVE 🔥\n\n"
-        for g in games[:8]:
-            home=g['home_team']
-            # trova analisi
-            analisi = next((v for k,v in ANALISI.items() if k in home), "Analisi alle 14:00")
-            # quote live
-            q_text=""
-            if g.get('bookmakers'):
-                try:
-                    o=g['bookmakers'][0]['markets'][0]['outcomes']
-                    qh=next((x['price'] for x in o if x['name']==home),'?')
-                    qd=next((x['price'] for x in o if x['name']=='Draw'),'?')
-                    away=g['away_team']
-                    qa=next((x['price'] for x in o if x['name']==away),'?')
-                    q_text=f"1:{qh} X:{qd} 2:{qa}"
-                except: q_text="Quote in agg."
-            msg += f"⚽ {home} vs {g['away_team']}\n💡 {q_text} | {analisi}\n\n"
+        if not games:
+            return None
+
+        out = []
+        for g in games[:6]: # solo 6 partite, non 8
+            try:
+                dt = datetime.fromisoformat(g['commence_time'].replace('Z','+00:00'))
+                giorno = dt.strftime('%a %d/%m %H:%M')
+                home = g['home_team']
+                away = g['away_team']
+
+                q_home = q_draw = q_away = "?"
+                if g.get('bookmakers'):
+                    outcomes = g['bookmakers'][0]['markets'][0]['outcomes']
+                    q_home = next((o['price'] for o in outcomes if o['name']==home), '?')
+                    q_draw = next((o['price'] for o in outcomes if o['name']=='Draw'), '?')
+                    q_away = next((o['price'] for o in outcomes if o['name']==away), '?')
+
+                out.append(f"⚽ {giorno}\n{home} vs {away}\n→ 1={q_home} | X={q_draw} | 2={q_away}")
+            except:
+                pass
+        return "\n\n".join(out)
     except:
-        msg = "🔥 FUORI QUOTA - TURNO SERIE A 🔥\n\nTurno in arrivo - analisi alle 14:00"
+        return None
 
-    msg += "\n⏰ 3 UPDATE AL GIORNO"
-    requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id":CHANNEL,"text":msg}, timeout=15)
+def main():
+    partite = get_matches()
+    next_update = get_next_update_text()
 
-if __name__=="__main__":
+    if not partite:
+        partite = """⚽ Ven 17/10 20:45 - Frosinone vs Sassuolo
+⚽ Sab 18/10 15:00 - Venezia vs Napoli
+⚽ Sab 18/10 18:00 - Bologna vs Inter
+⚽ Sab 18/10 20:45 - Roma vs Genoa"""
+
+    msg = f"""🔥 FUORI QUOTA - Quote Serie A Live
+
+Ecco le quote di oggi:
+
+{partite}
+
+📌 LEGENDA: 1 = Vince in casa | X = Pareggio | 2 = Vince fuori casa
+Es: 1=1.68 vuol dire che se punti 10€ su vittoria casa, ne vinci 16.8€
+
+💡 COSA FACCIAMO:
+Non ti diciamo solo le quote. Alle {next_update} ti diciamo DOVE la quota è sbagliata (fuori quota).
+
+⏰ AGGIORNAMENTI AUTOMATICI:
+• 09:00 - Quote che sono scese stanotte
+• 14:00 - Analisi con novità e infortuni
+• 20:45 - Pick finale con formazioni ufficiali
+
+Prossimo aggiornamento: {next_update}
+
+#SerieA #FuoriQuota"""
+
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    payload = {"chat_id": CHANNEL, "text": msg}
+    requests.post(url, json=payload, timeout=15)
+
+if __name__ == "__main__":
+    main()
     main()
