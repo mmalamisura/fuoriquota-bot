@@ -1,8 +1,12 @@
 name: FuoriQuota Bot Giornaliero
+
 on:
   schedule:
-    - cron: '0 12 * * *'
-  workflow_dispatch:
+    - cron: '0 7 * * *' # 09:00 italiane (07:00 UTC) - POST MATTINA: Early value 24-48h prima
+    - cron: '0 12 * * *' # 14:00 italiane (12:00 UTC) - POST POMERIGGIO: Analisi + news infortuni
+    - cron: '45 18 * * *' # 20:45 italiane (18:45 UTC) - POST SERA: Formazioni ufficiali + drop finale
+  workflow_dispatch: # per lanciarlo a mano quando vuoi
+
 jobs:
   run:
     runs-on: ubuntu-latest
