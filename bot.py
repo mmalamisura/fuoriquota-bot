@@ -11,8 +11,7 @@ def get_matches():
     try:
         r = requests.get(url, params=params, timeout=20)
         if r.status_code == 401:
-            # Calendario completo 10 partite - così chi vuole scommettere OGGI le vede tutte
-            return """⚽ OGGI/DOMANI - TURNO COMPLETO SERIE A:
+            return """⚽ TURNO COMPLETO SERIE A:
 
 Ven 17/10 20:45 Como vs Verona
 Sab 18/10 12:30 Lecce vs Sassuolo
@@ -23,9 +22,7 @@ Dom 19/10 12:30 Cagliari vs Bologna
 Dom 19/10 15:00 Genoa vs Parma
 Dom 19/10 15:00 Atalanta vs Torino
 Dom 19/10 18:00 Juventus vs Roma
-Dom 19/10 20:45 Milan vs Udinese
-
-🔥 Le quote live tornano con API attiva - intanto analisi alle 14:00"""
+Dom 19/10 20:45 Milan vs Udinese"""
 
         games = r.json()
         valid = []
@@ -36,7 +33,7 @@ Dom 19/10 20:45 Milan vs Udinese
             except: pass
         valid.sort(key=lambda x:x[0])
         out=[]
-        for dt,g in valid[:10]: # 10 partite, non 4
+        for dt,g in valid[:10]:
             home=g['home_team']; away=g['away_team']
             giorno=dt.strftime('%d/%m %H:%M')
             q_text="Quote in arrivo"
@@ -49,7 +46,7 @@ Dom 19/10 20:45 Milan vs Udinese
                     q_text=f"1:{qh} X:{qd} 2:{qa}"
                 except: pass
             out.append(f"⚽ {giorno} {home} vs {away}\n{q_text}")
-        return "\n\n".join(out)
+        return "\n\n".join(out) if out else "Turno in arrivo"
     except Exception as e:
         return "Turno Serie A in arrivo - analisi alle 14:00"
 
@@ -59,11 +56,10 @@ def main():
 
 {partite}
 
-💡 Scommetti qui con BONUS 100€ -> [IL TUO LINK AFFILIAZIONE]
-Analisi valore alle 14:00 e formazioni alle 20:45
+💡 Analisi valore alle 14:00 e formazioni alle 20:45
 
-#SerieA #Pronostici"""
+#SerieA"""
     requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id":CHANNEL,"text":msg}, timeout=15)
 
-if __name__=="__main__": main()
+if __name__=="__main__":
     main()
