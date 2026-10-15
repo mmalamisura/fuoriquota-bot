@@ -16,8 +16,9 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install requests
-      - env:
+      - name: Run bot
+        run: python bot.py
+        env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-        run: python bot.py
