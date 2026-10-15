@@ -1,116 +1,78 @@
 import requests, os
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHANNEL = os.getenv("CHANNEL_ID")
-ODDS_KEY = os.getenv("ODDS_API_KEY")
-ITALY = ZoneInfo("Europe/Rome")
-GIORNI_IT = {"Mon":"Lun","Tue":"Mar","Wed":"Mer","Thu":"Gio","Fri":"Ven","Sat":"Sab","Sun":"Dom"}
+CHANNEL = "@fuoriquota"  # <--- metti il tuo canale quote
+TAG_AFFILIATI = {
+    "Snai": "tuo-link-snai",
+    "Goldbet": "tuo-link-goldbet",
+    "Lottomatica": "tuo-link-lottomatica",
+    "Sisal": "tuo-link-sisal",
+    "Eurobet": "tuo-link-eurobet",
+    "Planetwin365": "tuo-link-planetwin",
+    "Bet365.it": "tuo-link-bet365it",
+}
 
-# SOLO BOOK ADM ITALIANI - APPROVATI PER AFFILIAZIONE
-BOOK_ADM_ITALIA = [
-    "Bet365", "【entity-Betano¦canonical_name=Betano】", "Bwin", "William Hill", "Betfair",
-    "Unibet", "888sport", "Betsson", "LeoVegas", "Goldbet", "Snai"
+# SOLO QUESTI SONO VALIDI - tutti gli altri vengono scartati
+ADM_VALIDI = list(TAG_AFFILIATI.keys())
+
+def is_adm_valido(nome_book):
+    # Blocca NL, SE, COM, Exchange, Betfair
+    if any(x in nome_book for x in ["(NL)", "(SE)", "(COM)", "Exchange", "Betfair", "Betsson", "Pinnacle"]):
+        return False
+    return any(adm.lower() in nome_book.lower() for adm in ADM_VALIDI)
+
+def fuori_quota_perc(media, migliore):
+    return round((migliore / media - 1) * 100, 1)
+
+# --- QUI METTI LE TUE QUOTE - Esempio con partite di oggi ---
+# Il tuo scraper deve riempire questa lista solo con quote ADM
+PARTITE = [
+    {
+        "data": "Ven 17/10 20:45",
+        "match": "【entity-Frosinone¦canonical_name=Frosinone】 - 【entity-Sassuolo¦canonical_name=Sassuolo】",
+        "analisi_generale": "【entity-Frosinone¦canonical_name=Frosinone】 in casa segna tanto, 【entity-Sassuolo¦canonical_name=Sassuolo】 fuori casa 4 over nelle ultime 5. Difese non imperforabili.",
+        "mercati": [
+            {"tipo": "Esito X", "media_adm": 3.65, "quota_best": 3.85, "book": "Snai", "perche_valore": "X sottovalutato, media ADM 3.65, Snai offre 3.85 per pareggio tra due squadre che pareggiano spesso."},
+            {"tipo": "Over 2.5", "media_adm": 1.85, "quota_best": 2.05, "book": "Goldbet", "perche_valore": "Over 2.5 alto: entrambe Over nelle ultime 3, attacco 【entity-Frosinone¦canonical_name=Frosinone】 1.8 gol/partita."},
+            {"tipo": "Gol (Entrambe segnano)", "media_adm": 1.70, "quota_best": 1.92, "book": "Lottomatica", "perche_valore": "BTTS: 【entity-Frosinone¦canonical_name=Frosinone】 ha segnato in 8/9 in casa, 【entity-Sassuolo¦canonical_name=Sassuolo】 7/9 fuori."},
+        ]
+    },
+    {
+        "data": "Sab 18/10 18:00",
+        "match": "【entity-Bologna¦canonical_name=Bologna】 - Inter",
+        "analisi_generale": "Inter favorita ma 【entity-Bologna¦canonical_name=Bologna】 in casa ha fermato Milan e Napoli.",
+        "mercati": [
+            {"tipo": "1 + Handicap 【entity-Bologna¦canonical_name=Bologna】 +1", "media_adm": 2.10, "quota_best": 2.45, "book": "Eurobet", "perche_valore": "Handicap +1 【entity-Bologna¦canonical_name=Bologna】 copre pareggio e vittoria di misura Inter. Valore +16% vs media."},
+            {"tipo": "X Primo Tempo", "media_adm": 2.30, "quota_best": 2.60, "book": "Sisal", "perche_valore": "Primo tempo equilibrato, Inter parte piano fuori casa."},
+        ]
+    },
 ]
 
-def send_telegram(text):
+def build_messaggio():
+    ora = datetime.now().strftime("%d/%m %H:%M")
+    txt = f"💎 FUORI QUOTA - {ora} (IT)\nSerie A - Solo quote ADM Italia - Dove trovare il valore:\n\n"
+    
+    for p in PARTITE:
+        txt += f"📅 {p['data']}\n⚽ {p['match']}\n📝 Analisi: {p['analisi_generale']}\n"
+        for m in p['mercati']:
+            if not is_adm_valido(m['book']):
+                continue
+            perc = fuori_quota_perc(m['media_adm'], m['quota_best'])
+            if perc < 5:
+                continue
+            link = TAG_AFFILIATI.get(m['book'], "")
+            txt += f"Quote ADM {m['tipo']}: media @{m['media_adm']}\n"
+            txt += f"💎 FUORI QUOTA: {m['tipo']} @{m['quota_best']} su {m['book']} (media @{m['media_adm']}) +{perc}% - {m['perche_valore']}\n"
+            txt += f"Link: {link}\n\n"
+    
+    txt += "\n+18 | Gioco responsabile | Solo quote ADM Italia\nInfo statistiche, non invito a scommettere."
+    return txt
+
+def send():
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    r = requests.post(url, json={"chat_id": CHANNEL, "text": text, "parse_mode": "Markdown"}, timeout=20)
-    return r
-
-def get_from_odds():
-    url = "https://api.the-odds-api.com/v4/sports/soccer_italy_serie_a/odds/"
-    params = {"regions": "eu,uk", "markets": "h2h,totals", "oddsFormat": "decimal", "apiKey": ODDS_KEY}
-    resp = requests.get(url, params=params, timeout=20)
-    return resp.json() if resp.status_code==200 else []
-
-def build_message():
-    now_it = datetime.now(ITALY)
-    now_str = now_it.strftime("%d/%m %H:%M")
-    odds = get_from_odds()
-    odds_sorted = sorted(odds, key=lambda x: x.get('commence_time',''))
-
-    msg = f"🎯 *FUORI QUOTA - {now_str} (IT)*\n"
-    msg += f"Serie A - Solo quote ADM Italia - Dove trovare il valore:\n\n"
-
-    giorno_corrente = ""
-    for m in odds_sorted:
-        home_raw = m['home_team']
-        away_raw = m['away_team']
-        home = home_raw.replace('Inter Milan','Inter').replace('AC Milan','Milan').replace('Atalanta BC','Atalanta').replace('AS Roma','Roma')
-        away = away_raw.replace('Inter Milan','Inter').replace('AC Milan','Milan').replace('Atalanta BC','Atalanta').replace('AS Roma','Roma')
-
-        try:
-            dt = datetime.fromisoformat(m['commence_time'].replace('Z','+00:00')).astimezone(ITALY)
-            giorno_it = GIORNI_IT.get(dt.strftime("%a"), dt.strftime("%a"))
-            giorno_label = dt.strftime("%d/%m")
-            ora = dt.strftime("%H:%M")
-        except:
-            continue
-
-        if giorno_label!= giorno_corrente:
-            msg += f"📅 *{giorno_it} {giorno_label}*\n"
-            giorno_corrente = giorno_label
-
-        # FILTRO ADM
-        book_adm = [b for b in m.get('bookmakers',[]) if any(adm.lower() in b.get('title','').lower() for adm in BOOK_ADM_ITALIA)]
-        if not book_adm:
-            continue
-
-        h2h_prices = {}
-        h2h_book = {}
-        for b in book_adm:
-            bname = b.get('title','Book')
-            for mk in b.get('markets',[]):
-                if mk['key']=='h2h':
-                    for o in mk['outcomes']:
-                        h2h_prices.setdefault(o['name'], []).append(o['price'])
-                        if o['name'] not in h2h_book or o['price'] > h2h_book[o['name']][0]:
-                            h2h_book[o['name']] = (o['price'], bname)
-
-        best_diff = 0
-        best_name = ""; best_price = 0; best_avg = 0
-        for name, prices in h2h_prices.items():
-            if len(prices) >= 2:
-                avg = sum(prices)/len(prices)
-                best = max(prices)
-                diff = best - avg
-                if diff > best_diff:
-                    best_diff = diff; best_name = name; best_price = best; best_avg = avg
-
-        q1 = qx = q2 = ""
-        main_book = book_adm[0]
-        for mk in main_book.get('markets',[]):
-            if mk['key']=='h2h':
-                for o in mk['outcomes']:
-                    if o['name'] == home_raw: q1 = f"1 @{o['price']:.2f}"
-                    elif o['name'] == away_raw: q2 = f"2 @{o['price']:.2f}"
-                    elif "Draw" in o['name']: qx = f"X @{o['price']:.2f}"
-
-        msg += f"⚽ *{home} - {away}* - {ora}\n"
-        msg += f"Quote ADM: {q1} | {qx} | {q2}\n"
-
-        if best_diff >= 0.10:
-            perc = (best_diff / best_avg * 100) if best_avg else 0
-            dove = h2h_book.get(best_name, (best_price, "Book"))[1]
-            # QUI METTERAI IL TUO LINK AFFILIATO
-            # Esempio: Betano -> https://www.betano.it/?btag=TUO_CODICE
-            if "Draw" in best_name:
-                msg += f"💎 FUORI QUOTA: X @{best_price:.2f} su {dove} (media @{best_avg:.2f}) +{perc:.0f}% - Link in bio\n"
-            elif best_name == home_raw:
-                msg += f"💎 FUORI QUOTA: 1 {home} @{best_price:.2f} su {dove} (media @{best_avg:.2f}) +{perc:.0f}% - Link in bio\n"
-            else:
-                msg += f"💎 FUORI QUOTA: 2 {away} @{best_price:.2f} su {dove} (media @{best_avg:.2f}) +{perc:.0f}% - Link in bio\n"
-        msg += f"\n"
-
-        if len(msg) > 3700:
-            break
-
-    msg += f"\n+18 | Gioco responsabile | Solo quote ADM Italia\n"
-    msg += f"Info statistiche, non invito a scommettere"
-    return msg
+    r = requests.post(url, json={"chat_id": CHANNEL, "text": build_messaggio()})
+    print(f"Telegram {r.status_code}: {r.text[:500]}")
 
 if __name__ == "__main__":
-    txt = build_message()
-    send_telegram(txt)
+    send()
