@@ -2,7 +2,7 @@ import requests, os
 from datetime import datetime
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHANNEL = "@fuoriquota"  # <--- se ti da chat not found metti ID numerico -100...
+CHANNEL = "@fuoriquotachannel"  # <--- se ti da chat not found metti ID numerico -100...
 ADM_VALIDI = ["Snai","Goldbet","Lottomatica","Sisal","Eurobet","Planetwin365","Bet365.it","William Hill IT"]
 BAN = ["(NL)","(SE)","Betfair","Betsson","Pinnacle","Exchange"]
 
