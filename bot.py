@@ -29,14 +29,14 @@ def build_message():
     odds_sorted = sorted(odds, key=lambda x: x.get('commence_time',''))
 
     msg = f"🎯 *FUORI QUOTA - {now_str} (IT)*\n"
-    msg += f"Serie A - {len(odds_sorted)} partite rilevate - Analisi valore:\n\n"
+    msg += f"Serie A - {len(odds_sorted)} partite - Dove trovare il valore:\n\n"
 
     giorno_corrente = ""
     for m in odds_sorted:
         home_raw = m['home_team']
         away_raw = m['away_team']
-        home = home_raw.replace('Inter 【entity-Milan¦canonical_name=AC Milan】','Inter').replace('【entity-AC Milan¦canonical_name=AC Milan】','【entity-Milan¦canonical_name=AC Milan】').replace('【entity-Atalanta BC¦canonical_name=Atalanta BC】','【entity-Atalanta¦canonical_name=Atalanta BC】').replace('【entity-AS Roma¦canonical_name=AS Roma】','【entity-Roma¦canonical_name=AS Roma】')
-        away = away_raw.replace('Inter 【entity-Milan¦canonical_name=AC Milan】','Inter').replace('【entity-AC Milan¦canonical_name=AC Milan】','【entity-Milan¦canonical_name=AC Milan】').replace('【entity-Atalanta BC¦canonical_name=Atalanta BC】','【entity-Atalanta¦canonical_name=Atalanta BC】').replace('【entity-AS Roma¦canonical_name=AS Roma】','【entity-Roma¦canonical_name=AS Roma】')
+        home = home_raw.replace('Inter Milan','Inter').replace('AC Milan','Milan').replace('Atalanta BC','Atalanta').replace('AS Roma','Roma')
+        away = away_raw.replace('Inter Milan','Inter').replace('AC Milan','Milan').replace('Atalanta BC','Atalanta').replace('AS Roma','Roma')
 
         try:
             dt = datetime.fromisoformat(m['commence_time'].replace('Z','+00:00')).astimezone(ITALY)
@@ -55,13 +55,16 @@ def build_message():
         fuori_quota_testo = ""
 
         if book:
-            # 1. Calcola media di mercato per trovare il fuori quota
             h2h_prices = {}
+            h2h_book = {}
             for b in book:
+                bname = b.get('title','Book')
                 for mk in b.get('markets',[]):
                     if mk['key']=='h2h':
                         for o in mk['outcomes']:
                             h2h_prices.setdefault(o['name'], []).append(o['price'])
+                            if o['name'] not in h2h_book or o['price'] > h2h_book[o['name']][0]:
+                                h2h_book[o['name']] = (o['price'], bname)
 
             best_diff = 0
             best_name = ""
@@ -80,14 +83,14 @@ def build_message():
 
             if best_diff >= 0.15:
                 perc = (best_diff / best_avg * 100) if best_avg else 0
+                dove = h2h_book.get(best_name, (best_price, "Book"))[1]
                 if "Draw" in best_name:
-                    fuori_quota_testo = f"💎 *FUORI QUOTA: Pareggio X @{best_price:.2f} (media mercato @{best_avg:.2f})*\n👉 Un bookmaker paga il pareggio il +{perc:.0f}% in più. Valore rilevato.\n"
+                    fuori_quota_testo = f"💎 *FUORI QUOTA: Pareggio X @{best_price:.2f} su {dove} (media @{best_avg:.2f})*\n👉 Dove trovarla: {dove} paga +{perc:.0f}% sopra la media.\n"
                 elif best_name == home_raw:
-                    fuori_quota_testo = f"💎 *FUORI QUOTA: Vittoria {home} 1 @{best_price:.2f} (media @{best_avg:.2f})*\n👉 {home} pagata +{perc:.0f}% sopra la media. Possibile quota in calo.\n"
+                    fuori_quota_testo = f"💎 *FUORI QUOTA: 1 {home} @{best_price:.2f} su {dove} (media @{best_avg:.2f})*\n👉 Dove trovarla: {dove} paga {home} +{perc:.0f}% sopra media.\n"
                 elif best_name == away_raw:
-                    fuori_quota_testo = f"💎 *FUORI QUOTA: Vittoria {away} 2 @{best_price:.2f} (media @{best_avg:.2f})*\n👉 {away} pagata +{perc:.0f}% sopra la media. Valore sul favorito.\n"
+                    fuori_quota_testo = f"💎 *FUORI QUOTA: 2 {away} @{best_price:.2f} su {dove} (media @{best_avg:.2f})*\n👉 Dove trovarla: {dove} paga {away} +{perc:.0f}% sopra media.\n"
 
-            # 2. Quote base ordinate 1 X 2
             main_book = book[0]
             for mk in main_book.get('markets',[]):
                 if mk['key']=='h2h':
@@ -111,14 +114,14 @@ def build_message():
         if fuori_quota_testo:
             msg += f"{fuori_quota_testo}\n"
         else:
-            msg += f"Mercato equilibrato, nessuna quota fuori media.\n\n"
+            msg += f"Mercato equilibrato.\n\n"
 
         if len(msg) > 3800:
-            msg += f"\n...e altre {len(odds_sorted)-odds_sorted.index(m)-1} partite nel prossimo scan delle 14:00\n"
+            msg += f"\n...altre {len(odds_sorted)-odds_sorted.index(m)-1} partite alle 14:00\n"
             break
 
-    msg += f"\n📊 Analisi automatica su {len(odds_sorted)} partite quotate da 10gg\n"
-    msg += f"⏰ Prossimo scan automatico: 14:00 / 20:45"
+    msg += f"\n📊 Analisi su {len(odds_sorted)} partite\n"
+    msg += f"⏰ Scan: 14:00 / 20:45"
     return msg
 
 if __name__ == "__main__":
